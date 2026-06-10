@@ -28,6 +28,7 @@ STRIP_HEADERS = frozenset({
     "cf-visitor",
     "cf-ipcountry",
     "cf-worker",
+    "accept-encoding",
 })
 
 HOP_BY_HOP = frozenset({
@@ -39,6 +40,8 @@ HOP_BY_HOP = frozenset({
     "trailers",
     "transfer-encoding",
     "upgrade",
+    "content-encoding",
+    "content-length",
 })
 
 
@@ -83,7 +86,7 @@ def clean_request_headers(headers):
 
 
 async def health(request):
-    return web.json_response({"status": "ok", "proxy": "osu-api-proxy"})
+    return web.json_response({"status": "ok", "proxy": "osu-api-proxy-python"})
 
 
 async def proxy_handler(request):
@@ -111,7 +114,11 @@ async def proxy_handler(request):
 
     query = dict(request.query)
     query.pop("proxy_secret", None)
-    clean_qs = urlencode(query, doseq=True)
+
+    upstream_url = f"{UPSTREAM}{path}{'?' + urlencode(query, doseq=True) if query else ''}"
+    logger.debug(">>> %s %s", method, upstream_url)
+    logger.debug(">>> headers: %s", dict(headers))
+    logger.debug(">>> query: %s", query)
 
     try:
         body = await request.read()
@@ -121,12 +128,14 @@ async def proxy_handler(request):
         )
         async with session.request(
             method,
-            f"{UPSTREAM}{path}{'?' + clean_qs if clean_qs else ''}",
+            upstream_url,
             headers=headers,
             data=body if body else None,
             timeout=upstream_timeout,
             allow_redirects=False,
         ) as upstream:
+            logger.debug("<<< %s %s -> %s", method, path, upstream.status)
+            logger.debug("<<< headers: %s", dict(upstream.headers))
             resp_headers = {}
             for k, v in upstream.headers.items():
                 lk = k.lower()
