@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import time
+from urllib.parse import urlencode
 
 from aiohttp import web, ClientSession, ClientTimeout
 from dotenv import load_dotenv
@@ -16,6 +17,7 @@ READ_TIMEOUT = int(os.environ.get("READ_TIMEOUT", "90"))
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8080"))
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+PROXY_SECRET = os.environ.get("PROXY_SECRET", "")
 
 UPSTREAM_HOST = UPSTREAM.replace("https://", "").replace("http://", "").split("/")[0]
 
@@ -85,6 +87,15 @@ async def health(request):
 
 
 async def proxy_handler(request):
+    if PROXY_SECRET:
+        hdr_secret = request.headers.get("X-Proxy-Secret", "")
+        arg_secret = request.query.get("proxy_secret", "")
+        if hdr_secret != PROXY_SECRET and arg_secret != PROXY_SECRET:
+            return web.json_response(
+                {"error": "Invalid or missing X-Proxy-Secret."},
+                status=401,
+            )
+
     if not limiter.has_capacity():
         return web.json_response(
             {"error": "Rate limit exceeded. Try again later."},
@@ -98,6 +109,10 @@ async def proxy_handler(request):
     headers = clean_request_headers(request.headers)
     headers["Host"] = UPSTREAM_HOST
 
+    query = dict(request.query)
+    query.pop("proxy_secret", None)
+    clean_qs = urlencode(query, doseq=True)
+
     try:
         body = await request.read()
         upstream_timeout = ClientTimeout(
@@ -106,7 +121,7 @@ async def proxy_handler(request):
         )
         async with session.request(
             method,
-            f"{UPSTREAM}{path}",
+            f"{UPSTREAM}{path}{'?' + clean_qs if clean_qs else ''}",
             headers=headers,
             data=body if body else None,
             timeout=upstream_timeout,
