@@ -15,7 +15,7 @@ BURST = int(os.environ.get("BURST", "10"))
 CONNECT_TIMEOUT = int(os.environ.get("CONNECT_TIMEOUT", "10"))
 READ_TIMEOUT = int(os.environ.get("READ_TIMEOUT", "90"))
 HOST = os.environ.get("HOST", "0.0.0.0")
-PORT = int(os.environ.get("PORT", "8080"))
+PORT = int(os.environ.get("PORT", "8727"))
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 PROXY_SECRET = os.environ.get("PROXY_SECRET", "")
 
